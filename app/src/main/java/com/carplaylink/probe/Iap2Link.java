@@ -48,6 +48,11 @@ public final class Iap2Link {
     public static final int CSM_WIFI_INFO = 0x5701;
     public static final int CSM_REQUEST_WIFI_CONFIG = 0x5702;
     public static final int CSM_WIFI_CONFIG = 0x5703;
+    // ★ v0.2：真 iPhone 在 WiFi 交接后会补发这几条（对照 carplay-wifi-extractor / CPC200 逆向文档）
+    public static final int CSM_DEVICE_LANGUAGE_UPDATE = 0x4E0A;
+    public static final int CSM_DEVICE_TIME_UPDATE = 0x4E0B;
+    public static final int CSM_WIRELESS_CARPLAY_UPDATE = 0x4E0D;
+    public static final int CSM_DEVICE_TRANSPORT_IDENTIFIER = 0x4E0E;
 
     private Iap2Link() {
     }
@@ -331,6 +336,10 @@ public final class Iap2Link {
             case CSM_WIFI_INFO: return "WiFiInformation";
             case CSM_REQUEST_WIFI_CONFIG: return "RequestAccessoryWiFiConfigurationInformation";
             case CSM_WIFI_CONFIG: return "AccessoryWiFiConfigurationInformation";
+            case CSM_DEVICE_LANGUAGE_UPDATE: return "DeviceLanguageUpdate";
+            case CSM_DEVICE_TIME_UPDATE: return "DeviceTimeUpdate";
+            case CSM_WIRELESS_CARPLAY_UPDATE: return "WirelessCarPlayUpdate";
+            case CSM_DEVICE_TRANSPORT_IDENTIFIER: return "DeviceTransportIdentifierNotification";
             default: return "Unknown";
         }
     }

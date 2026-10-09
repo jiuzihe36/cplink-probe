@@ -683,6 +683,29 @@ public class ProbeSession {
                 listener.onWifi(ssid, pass,
                         sec == null ? -1 : Iap2Link.u8(sec, 0),
                         ch == null ? -1 : Iap2Link.u8(ch, 0));
+                // ★ v0.2：**补真 iPhone 在 WiFi 交接后必发的两条**（外加语言）。
+                // 不补的症状（实测）：车机每 ~4 秒重发一次 0x5703 —— 它在等手机说"我拿到凭据了、正在切 WiFi"。
+                // 依据：HaToan/carplay-wifi-extractor（手机侧 iAP2 实现）+ CPC200 逆向文档 Phase D。
+                //   0x4E0D WirelessCarPlayUpdate      {status=1(可用)}   → TLV1 = uint8
+                //   0x4E0E DeviceTransportIdentifier  {蓝牙transportId, USB transportId} → TLV1/TLV2 = 字符串
+                //   0x4E0A DeviceLanguageUpdate       {语言}             → TLV1 = 字符串
+                // （0x4E0B DeviceTimeUpdate 的 TLV 布局没有权威来源，先不发，免得喂垃圾。）
+                if (!handoffSent) {
+                    handoffSent = true;
+                    try {
+                        sendCsm(Iap2Link.CSM_WIRELESS_CARPLAY_UPDATE, Iap2Link.paramU8(1, 1));
+                        log("> 发送 WirelessCarPlayUpdate (0x4E0D) status=1 —— 告诉车机：无线 CarPlay 可用、正在切 WiFi");
+                        sendCsm(Iap2Link.CSM_DEVICE_TRANSPORT_IDENTIFIER,
+                                Iap2Link.paramStr(1, btTransportId()),
+                                Iap2Link.paramStr(2, usbTransportId()));
+                        log("> 发送 DeviceTransportIdentifierNotification (0x4E0E) 蓝牙=" + btTransportId()
+                                + " USB=" + usbTransportId());
+                        sendCsm(Iap2Link.CSM_DEVICE_LANGUAGE_UPDATE, Iap2Link.paramStr(1, "en"));
+                        log("> 发送 DeviceLanguageUpdate (0x4E0A) lang=en");
+                    } catch (Throwable t) {
+                        log("   （发交接消息失败: " + t + "）");
+                    }
+                }
                 listener.onStatus("成功拿到车机热点信息");
                 done = true;
                 stage = 5;
@@ -782,6 +805,28 @@ public class ProbeSession {
     }
 
     // ------------------------------------------------------------- 发包工具
+
+    /** ★ v0.2：无线交接那几条消息只发一次（0x5703 会被车机反复重发） */
+    private boolean handoffSent;
+
+    /** 蓝牙 transport id —— 用我们自己那个稳定的 MAC 风格 deviceID（AirPlaySetup 里同一份） */
+    private String btTransportId() {
+        try {
+            return AirPlaySetup.ourDeviceId();
+        } catch (Throwable t) {
+            return "00:00:00:00:00:00";
+        }
+    }
+
+    /** USB transport id —— 真机是 24 位十六进制的不透明串；这里用配对 id 派生一个稳定的 */
+    private String usbTransportId() {
+        try {
+            String seed = Pairing.controllerId == null ? "CPLINK" : Pairing.controllerId;
+            return Crypto.hex(Crypto.sha512(Crypto.utf8(seed)), 12).toLowerCase();
+        } catch (Throwable t) {
+            return "000000000000000000000000";
+        }
+    }
 
     private void sendCsm(int msgId, byte[]... params) throws IOException {
         sendData(Iap2Link.csm(msgId, params), Iap2Link.SESSION_CONTROL);

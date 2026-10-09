@@ -53,7 +53,7 @@ public class MainActivity extends Activity implements ProbeSession.Listener {
 
     private static final int REQ_PERMS = 1001;
     /** 界面/日志里显示的版本（每次发版同步 app/build.gradle 的 versionName） */
-    private static final String VERSION = "v0.1";
+    private static final String VERSION = "v0.2";
 
     private TextView statusView;
     private TextView selectedView;
