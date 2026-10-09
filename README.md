@@ -68,14 +68,22 @@ Wi-Fi **AirPlay**（pair-setup / pair-verify / MFi auth-setup / SETUP）→ 把�
    按下按钮时（我们一定在前台）只做第一段，回到前台后（`onResume`）再做第二段。
 9. **握手不要"等不到就重发"式自激**：超时重发关键报文会让对端一直重新协商、永远进不了连接完成态
    （现象：手机一直广播发现包、推过来的画面是一张静止图）。参考实现（`carlife_pc_tool`）在该位置什么都不发。
-10. **清理调用不要放在新一轮启动流程中间**：`stop()` 会打到刚启动的线程（现象：日志刚写"音频流已开"，
+10. **无线交接后必须补 `0x4E0D` / `0x4E0E` / `0x4E0A`**：真 iPhone 拿到 Wi-Fi 凭据（`0x5703`）后会发
+    `WirelessCarPlayUpdate{status:1}`、`DeviceTransportIdentifierNotification{蓝牙 transportId, USB transportId}`、
+    `DeviceLanguageUpdate{语言}`，然后**拆掉蓝牙 iAP2 链路**、整条会话只走 Wi-Fi。
+    不补的症状（实测）：**车机每 ~4 秒重发一次 `0x5703`** —— 它在等手机说"我拿到凭据了、正在切 Wi-Fi"。
+    （依据：手机侧 iAP2 实现 `HaToan/carplay-wifi-extractor` + CPC200 逆向文档 Phase D；
+    `0x4E0B DeviceTimeUpdate` 的 TLV 布局无权威来源，暂不发。）
+11. **清理调用不要放在新一轮启动流程中间**：`stop()` 会打到刚启动的线程（现象：日志刚写"音频流已开"，
     下一行就是"共发 0 包"）。清理用 `resetQueue()` 这类不杀线程的调用，并且**先把上一轮的停止标志清零再启动**。
 
 ## 协议细节
 
 **iAP2（蓝牙 RFCOMM）**：marker `FF550200EE10` → SYN/LSP（`maxOut=4 maxLen=65535 rt=4000 ackTo=500 maxRetrans=4 maxAck=3`）
 → CSM 鉴权（`0xAA00/0xAA01` 证书 607 字节、`0xAA02/0xAA03` 签名 64 字节、手机报 `0xAA05`）
-→ `0x5702/0x5703` 拿车机热点 `SSID/密码/加密方式/信道`。
+→ `0x5702/0x5703` 拿车机热点 `SSID/密码/加密方式/信道` → 手机回
+`0x4E0D WirelessCarPlayUpdate{status:1}` + `0x4E0E DeviceTransportIdentifierNotification` +
+`0x4E0A DeviceLanguageUpdate`（然后真机会拆掉蓝牙、会话转 Wi-Fi）。
 
 **AirPlay（RTSP 7000，加密后走控制通道）**：
 `GET /info`（displays / hidDevices / audioFormats）→ `/pair-setup`（SRP-3072，PIN 3939）

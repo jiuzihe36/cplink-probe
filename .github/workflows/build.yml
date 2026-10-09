@@ -63,12 +63,19 @@ jobs:
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1
-          name: CPLink 探测 v0.1
+          tag_name: v0.2
+          name: CPLink 探测 v0.2
           body: |
             **安卓手机冒充 iPhone，占住只有无线 CarPlay 的车机。**
             手机侧自研讲 CarPlay（蓝牙 iAP2 + Wi-Fi AirPlay），把手机侧的画面推上车机屏，
             车机触摸/声音走 AirPlay 通道回来。手机侧不需要 MFi 芯片。
+
+            ## v0.2：补上无线交接的 iAP2 消息
+
+            真 iPhone 拿到 Wi-Fi 凭据后会补发 `0x4E0D WirelessCarPlayUpdate{status:1}`、
+            `0x4E0E DeviceTransportIdentifierNotification{蓝牙/USB transportId}`、`0x4E0A DeviceLanguageUpdate`，
+            然后拆掉蓝牙链路、会话转 Wi-Fi。**不补的症状**：车机每 ~4 秒重发一次 `0x5703`（实测）。
+            依据：手机侧 iAP2 实现 `HaToan/carplay-wifi-extractor` + CPC200 逆向文档 Phase D。
 
             ## 实测可用
 
