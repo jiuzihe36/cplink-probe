@@ -1,0 +1,94 @@
+name: build-apk
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK (cmdline-tools)
+        run: |
+          set -e
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          cd "$HOME/android-sdk/cmdline-tools"
+          curl -sSL -o clt.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q clt.zip
+          mv cmdline-tools latest
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+          yes | "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Assert APK is the right app (产物断言)
+        run: |
+          python3 - <<'PY'
+          import zipfile, os
+          apk = "app/build/outputs/apk/debug/app-debug.apk"
+          z = zipfile.ZipFile(apk)
+          ax = z.read("AndroidManifest.xml")
+          blob = ax.decode("utf-16-le", errors="ignore")
+          assert "com.carplaylink.probe.MainActivity" in blob, "入口类不对"
+          assert "com.carplaylink.probe" in blob, "包名不对"
+          dex = [n for n in z.namelist() if n.endswith(".dex")]
+          assert dex, "APK 里没有 dex"
+          print("APK OK:", dex, os.path.getsize(apk), "bytes")
+          PY
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cplink-probe-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1
+          name: CPLink 探测 v0.1
+          body: |
+            **安卓手机冒充 iPhone，占住只有无线 CarPlay 的车机。**
+            手机侧自研讲 CarPlay（蓝牙 iAP2 + Wi-Fi AirPlay），把手机侧的画面推上车机屏，
+            车机触摸/声音走 AirPlay 通道回来。手机侧不需要 MFi 芯片。
+
+            ## 实测可用
+
+            - ✅ 无线连上车机：iAP2 配对/鉴权 + 拿车机热点（`iAP2 链路已建立（NORMAL）` → `拿到车机热点 SSID=@NRadio-4B02-5G`）
+            - ✅ AirPlay 握手：pair-setup / pair-verify / MFi auth-setup / SETUP（`pair-verify 通过` → `SETUP#2 200 OK dataPort=…`）
+            - ✅ 视频上屏：第三方 H.264 直通（`已推 1000 帧 [CarLife 直通]`），按源端自报的 1280x720 开流、不拉伸
+            - ✅ 视频参数集：`已发 CarLife 自己的 VideoConfig（SPS 17 / PPS 4）`；缺参数集时发 98311 让源端重置编码器
+            - ✅ 手机整屏镜像（不依赖 CarLife）
+            - ⚠️ 音频流（AirPlay type=100，PCM 44100/2/16 大端）：已发出（`音频已发 8000 包 / 8000 KB PCM`），未听验
+            - ❌ 车机触摸：车机侧不发（`event 通道心跳：… 其中触摸 0 条`）
+            - ❌ 真车（NV8341）未验证；目前只在 DiPlay 假车机上跑通
+
+            ## 用法
+
+            主界面只有【▶ 开始投屏】【■ 停止】【高级 ▾】。
+
+            1. 【▶ 开始投屏】一键：拉起 CarLife+ → 提示切回本 App → 接上 CarLife+ → 摆 Car+ 前台 → 起 CarPlay。
+            2. 【高级 ▾】→【★ 投手机整屏到车机（不用 CarLife）】：不接 CarLife，直接推手机屏
+               （手机把 SmartDock 这类开源桌面模式启动器当桌面时，车机上就是它的横屏车机桌面）。
+            3. 触摸排查：【测试触摸】（绕开车机直发 CarLife 触控通道）+ event 通道心跳。
+
+            详见仓库 README。
+          files: app/build/outputs/apk/debug/app-debug.apk

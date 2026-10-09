@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.carplaylink.probe'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.carplaylink.probe"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "0.1"
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // 密码学原语（Ed25519 / X25519 / ChaCha20-Poly1305 / HKDF）——
+    // 平台只在 Android 13+ 才有 Ed25519/X25519，所以带上 BouncyCastle 兼容老机型。
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+}
